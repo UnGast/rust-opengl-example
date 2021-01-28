@@ -6,7 +6,7 @@ use std::{ffi::{CStr, CString, c_void}, os::raw::c_char};
 use std::ptr;
 use ::glam::*;
 mod path;
-use path::{Mesh, PathSegment, Vertex, Path};
+use path::{Mesh, Path, PathSegment, Triangle, Vertex};
 
 const VERTEX_SHADER_SOURCE: &str = r#"#version 330 core
 layout (location = 0) in vec3 inPos;
@@ -23,7 +23,7 @@ const FRAGMENT_SHADER_SOURCE: &str = r#"#version 330 core
 out vec4 outFragmentColor;
 
 void main() {
-    outFragmentColor = vec4(1, 0, 0, 1);
+    outFragmentColor = vec4(0.5, 0.5, 1, 1);
 }
 "#;
 
@@ -156,19 +156,28 @@ fn main() {
     let shaderProgram = ShaderProgram::new(VERTEX_SHADER_SOURCE.to_string(), FRAGMENT_SHADER_SOURCE.to_string());
 
     let mut test_path = Path::new(Vec::from([
-        PathSegment::new(Vector3::new(0.0, 0.0, 10.0)),
-        PathSegment::new(Vector3::new(0.0, 0.0, 10.0)),
-        PathSegment::new(Vector3::new(1.0, 0.0, 10.0)),
-        PathSegment::new(Vector3::new(1.0, 1.0, 10.0)),
-        PathSegment::new(Vector3::new(1.0, 1.0, 10.0)),
+        PathSegment::new(Vector3::new(-16.0, 0.0, 10.0)),
+        PathSegment::new(Vector3::new(-4.0, 0.0, 16.0)),
+        PathSegment::new(Vector3::new(0.0, 0.0, 20.0)),
+        PathSegment::new(Vector3::new(4.0, 0.0, 10.0)),
+        PathSegment::new(Vector3::new(20.0, 0.0, 10.0)),
     ]));
 
     let mut test_mesh = Mesh::new(Vec::from([
-        Vertex::new(Vector3::new(0.0, 0.0, 10.0)),
+        Vertex::new(Vector3::new(0.0, 0.0, 5.0)),
+        Vertex::new(Vector3::new(1.0, 0.0, 5.0)),
         Vertex::new(Vector3::new(1.0, 0.0, 10.0)),
-        Vertex::new(Vector3::new(1.0, 1.0, 5.0))
+        Vertex::new(Vector3::new(0.0, 0.0, 10.0)),
+
+        Vertex::new(Vector3::new(0.0, 1.0, 5.0)),
+        Vertex::new(Vector3::new(1.0, 1.0, 5.0)),
+    ]), Vec::from([
+        Triangle::new(0, 1, 2),
+        Triangle::new(0, 2, 3),
+        Triangle::new(0, 4, 5),
+        Triangle::new(0, 1, 5),
     ]));
-    test_mesh = test_path.makeLoopMesh();
+    //test_mesh = test_path.makeLoopMesh();
 
     let (mut vao, mut vbo) = (0, 0);
     unsafe {
@@ -189,13 +198,13 @@ fn main() {
 
     while !window.should_close() {
         unsafe {
-            gl::ClearColor(0.2, 0.3, 0.1, 1.0);
+            gl::ClearColor(0.0, 0.0, 0.4, 1.0);
             gl::Clear(gl::COLOR_BUFFER_BIT);
             
             gl::BindVertexArray(vao);
             gl::UseProgram(shaderProgram.id);
 
-            let vertices: Vec<f32> = test_mesh.vertices.iter().fold(
+            let vertices: Vec<f32> = test_mesh.unfold_vertices().iter().fold(
             Vec::<f32>::new(), 
             |res, vertex| {
                 [res, Vec::<f32>::from([vertex.position.x, vertex.position.y, vertex.position.z])].concat()
@@ -206,20 +215,21 @@ fn main() {
                 gl::STATIC_DRAW);
 
             let (window_width, window_height) = window.get_size();
-            let projection = Mat4::perspective_lh(::std::f32::consts::PI / 2.0, window_width as f32 / window_height as f32, 0.0, 1000.0);
-            let view = Mat4::look_at_rh(Vec3::new(0.0, 0.0, 1.0), Vec3::zero(), Vec3::new(0.0, 1.0, 0.0));
-                /*[1.0, 0.0, 0.0, 0.0],
-                [0.0, 1.0, 0.0, 0.0],
-                [0.0, 0.0, 1.0, 0.0],
-                [0.0, 0.0, 0.0, 1.0]
-            );*/
+            let projection = Mat4::perspective_lh(::std::f32::consts::PI / 2.0, window_height as f32 / window_width as f32, 0.0, 1000.0);
+
+            let player_pos = Vec3::new(30.0, 100.0, 0.0);
+            let player_look_direction = Vec3::new(0.0, -0.4, 1.0);
+            let view = Mat4::look_at_rh(player_pos + player_look_direction, player_pos, Vec3::new(0.0, 1.0, 0.0));
             let view_projection = projection.mul_mat4(&view);
+
             let test_vec = const_vec4!([1.0, 0.0, 10.0, 1.0]);
             let test_result = view.mul_vec4(test_vec);
-            let test_result_finished = test_result;//test_result.xyz()/test_result.w;
-            println!("test_vec {}", test_result_finished);
+            let test_result_finished = test_result;
+
+            //println!("test_vec {}", test_result_finished);
             shaderProgram.set_uniform_mat4("viewProjection", view_projection);
-            gl::DrawArrays(gl::TRIANGLES, 0, 3);
+            gl::PolygonMode(gl::FRONT_AND_BACK, gl::LINE);
+            gl::DrawArrays(gl::TRIANGLES, 0, 12);
         }
         
         window.swap_buffers();
