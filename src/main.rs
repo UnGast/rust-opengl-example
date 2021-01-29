@@ -157,11 +157,11 @@ fn main() {
     let shaderProgram = ShaderProgram::new(VERTEX_SHADER_SOURCE.to_string(), FRAGMENT_SHADER_SOURCE.to_string());
 
     let mut test_path = Path::new(Vec::from([
-        PathSegment::new(Vector3::new(-16.0, 0.0, 10.0)),
-        PathSegment::new(Vector3::new(-4.0, 0.0, 16.0)),
-        PathSegment::new(Vector3::new(0.0, 0.0, 20.0)),
-        PathSegment::new(Vector3::new(4.0, 0.0, 10.0)),
-        PathSegment::new(Vector3::new(20.0, 0.0, 10.0)),
+        PathSegment::new(Vector3::new(-1.0, 0.0, 0.0)),
+        PathSegment::new(Vector3::new(-0.5, 0.0, 0.0)),
+        PathSegment::new(Vector3::new(0.0, 0.0, 0.0)),
+        PathSegment::new(Vector3::new(0.5, 0.0, 0.0)),
+        PathSegment::new(Vector3::new(1.0, 0.0, 00.0)),
     ]));
 
     let mut test_mesh = Mesh::new(Vec::from([
@@ -187,7 +187,7 @@ fn main() {
         // right
         //Triangle::new()
     ]));
-    //test_mesh = test_path.makeLoopMesh();
+    test_mesh = test_path.makeLoopMesh();
 
     let (mut vao, mut vbo) = (0, 0);
     unsafe {
@@ -226,7 +226,8 @@ fn main() {
             gl::BindVertexArray(vao);
             gl::UseProgram(shaderProgram.id);
 
-            let mut vertices: Vec<f32> = test_mesh.unfold_vertices().iter().fold(
+            let mut raw_vertices = test_mesh.unfold_vertices();
+            let mut vertices = raw_vertices.iter().fold(
             Vec::<f32>::new(), 
             |res, vertex| {
                 [res, Vec::<f32>::from([vertex.position.x, vertex.position.y, vertex.position.z])].concat()
@@ -269,7 +270,7 @@ fn main() {
             shaderProgram.set_uniform_mat4("viewProjection", view_projection);
             shaderProgram.set_uniform_mat4("modelTransform", model_transform);
             //gl::PolygonMode(gl::FRONT_AND_BACK, gl::LINE);
-            gl::DrawArrays(gl::TRIANGLES, 0, 12);
+            gl::DrawArrays(gl::TRIANGLES, 0, raw_vertices.len() as i32);
         }
         
         window.swap_buffers();

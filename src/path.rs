@@ -31,8 +31,8 @@ impl Path {
 
         let ang_bisec_vec: Vector3<f32> = find_angle_bisecting_vec(&edge1, &edge2);//.normalize() + edge2.normalize();
         let cross_vec: Vector3<f32> = edge1.cross(&ang_bisec_vec).normalize();
-        println!("ALPHA BISC {}", ang_bisec_vec);
-        println!("CROSS {}", cross_vec);
+        //println!("ALPHA BISC {}", ang_bisec_vec);
+        //println!("CROSS {}", cross_vec);
 
         let loop_vert_count = 10;
         let mut vertices = Vec::<Vertex>::new();
@@ -40,9 +40,10 @@ impl Path {
         for i in 0..loop_vert_count {
             let angle = std::f32::consts::PI * 2.0 * (i as f32 / loop_vert_count as f32);
             let new_pos: Vector3<f32> = curr_seg.position + angle.cos() * ang_bisec_vec + angle.sin() * cross_vec;
-            println!("angle {} {} {}", angle, angle.cos(), angle.sin());
+            //println!("angle {} {} {}", angle, angle.cos(), angle.sin());
             let new_vert = Vertex { position: new_pos };
-            println!("new_vert {}", new_pos);
+            println!("MADE VERT {}", new_vert.position);
+            //println!("new_vert {}", new_pos);
             vertices.push(new_vert);
         }
 
@@ -53,7 +54,21 @@ impl Path {
         let mut vertices = Vec::<Vertex>::new();
         let mut triangles = Vec::<Triangle>::new();
         for i in 1..self.segments.len() - 1 {
+            println!("index of segment {}", i);
             let mut new_verts = self.makeLoopForSegment(i);
+            new_verts.push(Vertex::new(self.segments[i].position));
+            let center_i = vertices.len() + new_verts.len() - 1;
+
+            for vert_i in 0..new_verts.len() - 1 {
+                let triangle = Triangle::new(
+                    vertices.len() + vert_i,
+                    vertices.len() + (vert_i + 1) % (new_verts.len() - 1),
+                    center_i
+                );
+                triangles.push(triangle);
+                println!("made triangle {} {}, {}", triangle.v1, triangle.v2, triangle.v3);
+            }
+            /*
             if i > 1 {
                 for ver_i in 0..new_verts.len() {
                     triangles.append(&mut Vec::from([
@@ -68,10 +83,11 @@ impl Path {
                         )
                     ]))
                 }
-            }
+            }*/
             vertices.append(&mut new_verts);
         }
         println!("MADE VERTS {}", vertices.len());
+        println!("MADE TRIANGLES {}", triangles.len());
         Mesh { vertices, triangles }
     }
 }
@@ -102,7 +118,7 @@ fn find_angle_bisecting_vec(vector1: &Vector3<f32>, vector2: &Vector3<f32>) -> V
     bisec
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct Vertex {
     pub position: Vector3<f32>
 }
@@ -113,6 +129,7 @@ impl Vertex {
     }
 }
 
+#[derive(Copy, Clone)]
 pub struct Triangle {
     pub v1: usize,
     pub v2: usize,
