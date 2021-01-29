@@ -1,8 +1,8 @@
 use ::gl::types::*;
-use glfw::ffi::{glfwGetWindowAttrib, glfwGetWindowFrameSize, glfwGetWindowSize};
+use glfw::ffi::{glfwGetTime, glfwGetWindowAttrib, glfwGetWindowFrameSize, glfwGetWindowSize};
 use ::glfw::{Context};
 use nalgebra::{Point3, Vector3};
-use std::{ffi::{CStr, CString, c_void}, os::raw::c_char};
+use std::{ffi::{CStr, CString, c_void}, os::raw::c_char, thread::current, time::SystemTime};
 use std::ptr;
 use ::glam::*;
 mod path;
@@ -11,10 +11,11 @@ use path::{Mesh, Path, PathSegment, Triangle, Vertex};
 const VERTEX_SHADER_SOURCE: &str = r#"#version 330 core
 layout (location = 0) in vec3 inPos;
 
+uniform mat4 modelTransform;
 uniform mat4 viewProjection;
 
 void main() {
-    gl_Position = viewProjection * vec4(inPos, 0);
+    gl_Position = viewProjection * modelTransform * vec4(inPos, 1);
 }
 "#;
 
@@ -164,18 +165,27 @@ fn main() {
     ]));
 
     let mut test_mesh = Mesh::new(Vec::from([
-        Vertex::new(Vector3::new(0.0, 0.0, 5.0)),
-        Vertex::new(Vector3::new(1.0, 0.0, 5.0)),
-        Vertex::new(Vector3::new(1.0, 0.0, 10.0)),
-        Vertex::new(Vector3::new(0.0, 0.0, 10.0)),
+        // bottom
+        Vertex::new(Vector3::new(0.0, 0.0, 0.0)),
+        Vertex::new(Vector3::new(1.0, 0.0, 0.0)),
+        Vertex::new(Vector3::new(1.0, 0.0, 1.0)),
+        Vertex::new(Vector3::new(0.0, 0.0, 1.0)),
 
-        Vertex::new(Vector3::new(0.0, 1.0, 5.0)),
-        Vertex::new(Vector3::new(1.0, 1.0, 5.0)),
+        // front
+        Vertex::new(Vector3::new(0.0, 1.0, 0.0)),
+        Vertex::new(Vector3::new(1.0, 1.0, 0.0)),
+
+        // right
+        //Vertex::new(Vector3::new())
     ]), Vec::from([
+        // bottom
         Triangle::new(0, 1, 2),
         Triangle::new(0, 2, 3),
+        // front
         Triangle::new(0, 4, 5),
         Triangle::new(0, 1, 5),
+        // right
+        //Triangle::new()
     ]));
     //test_mesh = test_path.makeLoopMesh();
 
@@ -196,30 +206,59 @@ fn main() {
         gl::BindVertexArray(0);
     }
 
+    let mut last_frame_time = SystemTime::now();
+    let model_rotation_speed = Vec3::new(0.5, 0.5, 0.0);
+    let mut model_rotation = Vec3::zero();
+
     while !window.should_close() {
+        let current_frame_time = SystemTime::now();
+        let delta_time = current_frame_time.duration_since(last_frame_time).unwrap();
+        last_frame_time = current_frame_time;
+
         unsafe {
+            let (window_width, window_height) = window.get_size();
+            
+            gl::Viewport(0, 0, window_width, window_height);
+
             gl::ClearColor(0.0, 0.0, 0.4, 1.0);
             gl::Clear(gl::COLOR_BUFFER_BIT);
             
             gl::BindVertexArray(vao);
             gl::UseProgram(shaderProgram.id);
 
-            let vertices: Vec<f32> = test_mesh.unfold_vertices().iter().fold(
+            let mut vertices: Vec<f32> = test_mesh.unfold_vertices().iter().fold(
             Vec::<f32>::new(), 
             |res, vertex| {
                 [res, Vec::<f32>::from([vertex.position.x, vertex.position.y, vertex.position.z])].concat()
             });
+            /*vertices = vec![
+                0.0, 0.0, 5.0,
+                1.0, 1.0, 5.0,
+                0.0, 1.0, 5.0,
+                0.0, 0.0, 5.0,
+                1.0, 0.0, 5.0,
+                1.0, 1.0, 5.0
+            ];*/
+
             gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
             gl::BufferData(gl::ARRAY_BUFFER, vertices.len() as isize * std::mem::size_of::<f32>() as isize,
                 &vertices[0] as *const f32 as *const c_void,
                 gl::STATIC_DRAW);
 
-            let (window_width, window_height) = window.get_size();
-            let projection = Mat4::perspective_lh(::std::f32::consts::PI / 2.0, window_height as f32 / window_width as f32, 0.0, 1000.0);
+            let delta_rotation = model_rotation_speed * (delta_time.as_millis() as f32 / 1000.0);
+            model_rotation += delta_rotation;
+            model_rotation.x = model_rotation.x % 1.0;
+            model_rotation.y = model_rotation.y % 1.0;
+            model_rotation.z = model_rotation.z % 1.0;
+            let model_rotation_angle = model_rotation * std::f32::consts::PI * 2.0;
 
-            let player_pos = Vec3::new(30.0, 100.0, 0.0);
-            let player_look_direction = Vec3::new(0.0, -0.4, 1.0);
+            let model_transform = Mat4::from_translation(Vec3::new(0.0, 0.0, 10.0))
+                .mul_mat4(&Mat4::from_rotation_ypr(model_rotation_angle.x, model_rotation_angle.y, model_rotation_angle.z));
+
+            let player_pos = Vec3::new(0.0, 10.0, 0.0);
+            let player_look_direction = Vec3::new(0.0, -0.5, 1.0);
             let view = Mat4::look_at_rh(player_pos + player_look_direction, player_pos, Vec3::new(0.0, 1.0, 0.0));
+            let projection = Mat4::perspective_lh(::std::f32::consts::PI / 2.0, window_width as f32 / window_height as f32, 0.0, 1000.0);
             let view_projection = projection.mul_mat4(&view);
 
             let test_vec = const_vec4!([1.0, 0.0, 10.0, 1.0]);
@@ -228,7 +267,8 @@ fn main() {
 
             //println!("test_vec {}", test_result_finished);
             shaderProgram.set_uniform_mat4("viewProjection", view_projection);
-            gl::PolygonMode(gl::FRONT_AND_BACK, gl::LINE);
+            shaderProgram.set_uniform_mat4("modelTransform", model_transform);
+            //gl::PolygonMode(gl::FRONT_AND_BACK, gl::LINE);
             gl::DrawArrays(gl::TRIANGLES, 0, 12);
         }
         
