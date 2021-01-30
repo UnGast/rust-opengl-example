@@ -21,16 +21,44 @@ impl Path {
         Path { segments }
     }
 
-    pub fn makeLoopForSegment(&self, index: usize) -> Vec<Vertex> {
-        let prev_seg = &self.segments[index - 1];
+    pub fn connect_points_straight(points: Vec<Vector3<f32>>) -> Self {
+        let segments = points.iter().map(|p| PathSegment::new(*p)).collect();
+        Path { segments }
+    }
+
+    fn makeLoopForSegment(&self, index: usize) -> Vec<Vertex> {
         let curr_seg = &self.segments[index];
-        let next_seg = &self.segments[index + 1];
 
-        let edge1: Vector3<f32> = curr_seg.position - prev_seg.position;
-        let edge2: Vector3<f32> = next_seg.position - curr_seg.position;
+        let (right_vec1, right_vec2) = {
+            if index > 0 && index < self.segments.len() - 1 {
+                let prev_seg = &self.segments[index - 1];
+                let next_seg = &self.segments[index + 1];
 
-        let ang_bisec_vec: Vector3<f32> = find_angle_bisecting_vec(&edge1, &edge2);//.normalize() + edge2.normalize();
-        let cross_vec: Vector3<f32> = edge1.cross(&ang_bisec_vec).normalize();
+                let edge1: Vector3<f32> = curr_seg.position - prev_seg.position;
+                let edge2: Vector3<f32> = next_seg.position - curr_seg.position;
+
+                let ang_bisec_vec: Vector3<f32> = find_angle_bisecting_vec(&edge1, &edge2).normalize();//.normalize() + edge2.normalize();
+                let cross_vec: Vector3<f32> = edge1.cross(&ang_bisec_vec).normalize();
+
+                (ang_bisec_vec as Vector3<f32>, cross_vec as Vector3<f32>)
+            } else if index == 0 {
+                let next_seg = &self.segments[index + 1];
+                let edge: Vector3<f32> = next_seg.position - curr_seg.position;
+                let right_vec1 = get_any_vector_normal_to(&edge).normalize();
+                let right_vec2 = edge.cross(&right_vec1).normalize();
+
+                (right_vec1, right_vec2)
+            } else if index == self.segments.len() - 1 {
+                let prev_seg = &self.segments[index - 1];
+                let edge: Vector3<f32> = curr_seg.position - prev_seg.position;
+                let right_vec1 = get_any_vector_normal_to(&edge).normalize();
+                let right_vec2 = edge.cross(&right_vec1).normalize();
+
+                (right_vec1, right_vec2)
+            } else {
+                panic!("can't make a loop for index {}", index);
+            }
+        };
         //println!("ALPHA BISC {}", ang_bisec_vec);
         //println!("CROSS {}", cross_vec);
 
@@ -39,7 +67,7 @@ impl Path {
 
         for i in 0..loop_vert_count {
             let angle = std::f32::consts::PI * 2.0 * (i as f32 / loop_vert_count as f32);
-            let new_pos: Vector3<f32> = curr_seg.position + angle.cos() * ang_bisec_vec + angle.sin() * cross_vec;
+            let new_pos: Vector3<f32> = curr_seg.position + angle.cos() * right_vec1 + angle.sin() * right_vec2;
             //println!("angle {} {} {}", angle, angle.cos(), angle.sin());
             let new_vert = Vertex { position: new_pos };
             println!("MADE VERT {}", new_vert.position);
@@ -53,38 +81,41 @@ impl Path {
     pub fn makeLoopMesh(&self) -> Mesh {
         let mut vertices = Vec::<Vertex>::new();
         let mut triangles = Vec::<Triangle>::new();
-        for i in 1..self.segments.len() - 1 {
-            println!("index of segment {}", i);
-            let mut new_verts = self.makeLoopForSegment(i);
-            new_verts.push(Vertex::new(self.segments[i].position));
-            let center_i = vertices.len() + new_verts.len() - 1;
 
-            for vert_i in 0..new_verts.len() - 1 {
-                let triangle = Triangle::new(
-                    vertices.len() + vert_i,
-                    vertices.len() + (vert_i + 1) % (new_verts.len() - 1),
-                    center_i
-                );
-                triangles.push(triangle);
-                println!("made triangle {} {}, {}", triangle.v1, triangle.v2, triangle.v3);
-            }
-            /*
-            if i > 1 {
-                for ver_i in 0..new_verts.len() {
-                    triangles.append(&mut Vec::from([
-                        Triangle::new(
-                            vertices.len() + ver_i, 
-                            vertices.len() + ver_i - new_verts.len(),
-                            vertices.len() + ver_i - new_verts.len() + 1),
-                        Triangle::new(
-                            vertices.len() + ver_i,
-                            vertices.len() + ver_i - new_verts.len() + 1,
-                            vertices.len() + (ver_i + 1) % new_verts.len()
-                        )
-                    ]))
+        if self.segments.len() > 1 {
+            for i in 0..self.segments.len() {
+                println!("index of segment {}", i);
+                let mut new_verts = self.makeLoopForSegment(i);
+                new_verts.push(Vertex::new(self.segments[i].position));
+                let center_i = vertices.len() + new_verts.len() - 1;
+
+                for vert_i in 0..new_verts.len() - 1 {
+                    let triangle = Triangle::new(
+                        vertices.len() + vert_i,
+                        vertices.len() + (vert_i + 1) % (new_verts.len() - 1),
+                        center_i
+                    );
+                    triangles.push(triangle);
+                    println!("made triangle {} {}, {}", triangle.v1, triangle.v2, triangle.v3);
                 }
-            }*/
-            vertices.append(&mut new_verts);
+                /*
+                if i > 1 {
+                    for ver_i in 0..new_verts.len() {
+                        triangles.append(&mut Vec::from([
+                            Triangle::new(
+                                vertices.len() + ver_i, 
+                                vertices.len() + ver_i - new_verts.len(),
+                                vertices.len() + ver_i - new_verts.len() + 1),
+                            Triangle::new(
+                                vertices.len() + ver_i,
+                                vertices.len() + ver_i - new_verts.len() + 1,
+                                vertices.len() + (ver_i + 1) % new_verts.len()
+                            )
+                        ]))
+                    }
+                }*/
+                vertices.append(&mut new_verts);
+            }
         }
         println!("MADE VERTS {}", vertices.len());
         println!("MADE TRIANGLES {}", triangles.len());
@@ -92,30 +123,34 @@ impl Path {
     }
 }
 
+fn get_any_vector_normal_to(vector: &Vector3<f32>) -> Vector3<f32> {
+    if vector.z != 0.0 {
+        let x = 1f32;
+        let y = 1f32;
+        let z = (-vector.x - vector.y) / vector.z;
+        Vector3::new(x, y, z)
+    } else if vector.y != 0.0 {
+        let x = 1f32;
+        let z = 1f32;
+        let y = (-vector.x - vector.z) / vector.y;
+        Vector3::new(x, y, z)
+    } else if vector.x != 0.0 {
+        let z = 1f32;
+        let y = 1f32;
+        let x = (-vector.y - vector.z) / vector.x;
+        Vector3::new(x, y, z)
+    } else {
+        Vector3::new(1.0, 0.0, 0.0)
+    }
+}
+
 fn find_angle_bisecting_vec(vector1: &Vector3<f32>, vector2: &Vector3<f32>) -> Vector3<f32> {
     let mut bisec: Vector3<f32> = vector1.cross(vector2);
     println!("GOT BISEC {} {}", bisec, bisec.magnitude_squared());
     if bisec.magnitude_squared() == 0.0 {
-        if vector1.z != 0.0 {
-            let x = 1f32;
-            let y = 1f32;
-            let z = (-vector1.x - vector1.y) / vector1.z;
-            bisec = Vector3::new(x, y, z);
-        } else if vector1.y != 0.0 {
-            let x = 1f32;
-            let z = 1f32;
-            let y = (-vector1.x - vector1.z) / vector1.y;
-            bisec = Vector3::new(x, y, z);
-        } else if vector1.x != 0.0 {
-            let z = 1f32;
-            let y = 1f32;
-            let x = (-vector1.y - vector1.z) / vector1.x;
-            bisec = Vector3::new(x, y, z);
-        } else {
-            bisec = Vector3::new(1.0, 0.0, 0.0);
-        }
+        return get_any_vector_normal_to(vector1);
     }
-    bisec
+    return bisec
 }
 
 #[derive(Clone, Copy, Debug)]

@@ -154,15 +154,22 @@ fn main() {
 
     gl::load_with(|symbol| window.get_proc_address(symbol) as *const _);
 
+    let mut segments = Vec::<PathSegment>::new();
+    for i in 0..20 {
+        let y = (i as f32).powi(2) + 2.0;
+        segments.push(PathSegment::new(Vector3::new(i as f32, y, 0.0)));
+    }
     let shaderProgram = ShaderProgram::new(VERTEX_SHADER_SOURCE.to_string(), FRAGMENT_SHADER_SOURCE.to_string());
 
-    let mut test_path = Path::new(Vec::from([
+    let test_path = Path::new(segments);
+
+    /*let mut test_path = Path::new(Vec::from([
         PathSegment::new(Vector3::new(-1.0, 0.0, 0.0)),
         PathSegment::new(Vector3::new(-0.5, 0.0, 0.0)),
         PathSegment::new(Vector3::new(0.0, 0.0, 0.0)),
         PathSegment::new(Vector3::new(0.5, 0.0, 0.0)),
         PathSegment::new(Vector3::new(1.0, 0.0, 00.0)),
-    ]));
+    ]));*/
 
     let mut test_mesh = Mesh::new(Vec::from([
         // bottom
@@ -207,7 +214,7 @@ fn main() {
     }
 
     let mut last_frame_time = SystemTime::now();
-    let model_rotation_speed = Vec3::new(0.5, 0.5, 0.0);
+    let model_rotation_speed = Vec3::new(0.2, 0.2, 0.0);
     let mut model_rotation = Vec3::zero();
 
     while !window.should_close() {
@@ -253,7 +260,7 @@ fn main() {
             model_rotation.z = model_rotation.z % 1.0;
             let model_rotation_angle = model_rotation * std::f32::consts::PI * 2.0;
 
-            let model_transform = Mat4::from_translation(Vec3::new(0.0, 0.0, 10.0))
+            let model_transform = Mat4::from_translation(Vec3::new(0.0, 0.0, 20.0))
                 .mul_mat4(&Mat4::from_rotation_ypr(model_rotation_angle.x, model_rotation_angle.y, model_rotation_angle.z));
 
             let player_pos = Vec3::new(0.0, 10.0, 0.0);
