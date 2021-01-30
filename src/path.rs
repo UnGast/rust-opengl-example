@@ -69,7 +69,6 @@ impl Path {
             let new_pos: Vector3<f32> = curr_seg.position + angle.cos() * right_vec1 + angle.sin() * right_vec2;
             //println!("angle {} {} {}", angle, angle.cos(), angle.sin());
             let new_vert = Vertex { position: new_pos };
-            println!("MADE VERT {}", new_vert.position);
             //println!("new_vert {}", new_pos);
             vertices.push(new_vert);
         }
@@ -84,7 +83,6 @@ impl Path {
 
         if self.segments.len() > 1 {
             for i in 0..self.segments.len() {
-                println!("index of segment {}", i);
                 let mut new_verts = self.makeLoopForSegment(i, vertices_per_loop);
                 new_verts.push(Vertex::new(self.segments[i].position));
                 let center_i = vertices.len() + new_verts.len() - 1;
@@ -130,8 +128,7 @@ impl Path {
                 vertices.append(&mut new_verts);
             }
         }
-        println!("MADE VERTS {}", vertices.len());
-        println!("MADE TRIANGLES {}", triangles.len());
+
         Mesh { vertices, triangles }
     }
 }
@@ -159,7 +156,6 @@ fn get_any_vector_normal_to(vector: &Vector3<f32>) -> Vector3<f32> {
 
 fn find_angle_bisecting_vec(vector1: &Vector3<f32>, vector2: &Vector3<f32>) -> Vector3<f32> {
     let mut bisec: Vector3<f32> = vector1.cross(vector2);
-    println!("GOT BISEC {} {}", bisec, bisec.magnitude_squared());
     if bisec.magnitude_squared() == 0.0 {
         return get_any_vector_normal_to(vector1);
     }

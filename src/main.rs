@@ -1,7 +1,7 @@
 use ::gl::types::*;
 use glfw::ffi::{glfwGetTime, glfwGetWindowAttrib, glfwGetWindowFrameSize, glfwGetWindowSize};
 use ::glfw::{Context};
-use nalgebra::{Point3, Vector3};
+use nalgebra::{Point3, Vector3, Vector4};
 use std::{ffi::{CStr, CString, c_void}, os::raw::c_char, thread::current, time::SystemTime};
 use std::ptr;
 use ::glam::*;
@@ -14,17 +14,31 @@ layout (location = 0) in vec3 inPos;
 uniform mat4 modelTransform;
 uniform mat4 viewProjection;
 
+out vec3 normal;
+
 void main() {
     gl_Position = viewProjection * modelTransform * vec4(inPos, 1);
+    normal = vec3(0, 1, 0);
 }
 "#;
 
 const FRAGMENT_SHADER_SOURCE: &str = r#"#version 330 core
 
+in vec3 normal;
+
+uniform float ambientLightStrength;
+uniform vec4 ambientLightColor;
+uniform vec3 directionalLightDirection;
+uniform float directionalLightStrength;
+uniform vec4 directionalLightColor;
+
 out vec4 outFragmentColor;
 
 void main() {
-    outFragmentColor = vec4(0.5, 0.5, 1, 1);
+    vec4 ambientLightComponent = ambientLightStrength * ambientLightColor;
+    float directionalLightIncidentStrength = max(0, dot(normal, directionalLightDirection));
+    vec4 directionalLightComponent = directionalLightColor * directionalLightIncidentStrength * directionalLightStrength;
+    outFragmentColor = ambientLightComponent + directionalLightComponent;
 }
 "#;
 
@@ -138,6 +152,70 @@ impl ShaderProgram {
             gl::UniformMatrix4fv(gl::GetUniformLocation(self.id, name.as_gl().as_ptr()), 1, gl::FALSE, matrix.to_cols_array().as_ptr());
         }
     }
+
+    fn set_uniform_float(&self, name: &str, float: f32) {
+        unsafe {
+            gl::Uniform1f(gl::GetUniformLocation(self.id, name.as_gl().as_ptr()), float);
+        }
+    }
+
+    fn set_uniform_vec3(&self, name: &str, vector: Vector3<f32>) {
+        unsafe {
+            gl::Uniform3fv(gl::GetUniformLocation(self.id, name.as_gl().as_ptr()), 1, vector.as_ptr());
+        }
+    }
+
+    fn set_uniform_vec4(&self, name: &str, vector: Vector4<f32>) {
+        unsafe {
+            gl::Uniform4fv(gl::GetUniformLocation(self.id, name.as_gl().as_ptr()), 1, vector.as_ptr());
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+struct DirectionalLightSource {
+    pub strength: f32,
+    pub direction: Vector3<f32>,
+    pub color: Vector4<f32>
+}
+
+struct AmbientLightSource {
+    pub strength: f32,
+    pub color: Vector4<f32>
+}
+
+#[derive(Clone, Copy)]
+struct CyclicalTimedProgress {
+    progress_per_time: f32,
+    pub progress: f32,
+    curr_direction: bool
+}
+
+impl CyclicalTimedProgress {
+    pub fn new(progress_per_time: f32, initial_progress: bool) -> Self {
+        Self { progress_per_time, progress: if initial_progress { 1.0 } else { 0.0 }, curr_direction: true }
+    }
+
+    pub fn add_time(&mut self, time: f32) {
+        if self.curr_direction {
+            self.progress += time * self.progress_per_time;
+        } else {
+            self.progress -= time * self.progress_per_time;
+        } 
+        self.manage_progress();
+    }
+
+    fn manage_progress(&mut self) {
+        if self.progress > 1.0 {
+            self.progress -= self.progress - 1.0;
+            self.curr_direction = false;
+            self.manage_progress();
+        } else if self.progress < 0.0 {
+            self.progress = -self.progress;
+            self.curr_direction = true;
+            self.manage_progress();
+        }
+    }
 }
 
 fn main() {
@@ -217,10 +295,18 @@ fn main() {
     let model_rotation_speed = Vec3::new(0.2, 0.2, 0.0);
     let mut model_rotation = Vec3::zero();
 
+    let mut ambientLightSource = AmbientLightSource { strength: 0.3, color: Vector4::new(0.5, 0.5, 0.5, 1.0) };
+
+    let mut directionalLightSource = DirectionalLightSource { strength: 1.0, direction: Vector3::new(0.0, 1.0, 0.0), color: Vector4::new(1.0, 1.0, 1.0, 1.0) };
+    let mut directionalLightSourceProgress = CyclicalTimedProgress::new(0.1, false);
+
     while !window.should_close() {
         let current_frame_time = SystemTime::now();
         let delta_time = current_frame_time.duration_since(last_frame_time).unwrap();
         last_frame_time = current_frame_time;
+
+        directionalLightSourceProgress.add_time(delta_time.as_millis() as f32 / 1000.0);
+        directionalLightSource.strength = directionalLightSourceProgress.progress;
 
         unsafe {
             let (window_width, window_height) = window.get_size();
@@ -277,6 +363,11 @@ fn main() {
             shaderProgram.set_uniform_mat4("viewProjection", view_projection);
             shaderProgram.set_uniform_mat4("modelTransform", model_transform);
             //gl::PolygonMode(gl::FRONT_AND_BACK, gl::LINE);
+            shaderProgram.set_uniform_float("ambientLightStrength", ambientLightSource.strength);
+            shaderProgram.set_uniform_vec4("ambientLightColor", ambientLightSource.color);
+            shaderProgram.set_uniform_vec3("directionalLightDirection", directionalLightSource.direction);
+            shaderProgram.set_uniform_vec4("directionalLightColor", directionalLightSource.color);
+            shaderProgram.set_uniform_float("directionalLightStrength", directionalLightSource.strength);
             gl::DrawArrays(gl::TRIANGLES, 0, raw_vertices.len() as i32);
         }
         
