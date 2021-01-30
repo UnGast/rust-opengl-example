@@ -26,7 +26,7 @@ impl Path {
         Path { segments }
     }
 
-    fn makeLoopForSegment(&self, index: usize) -> Vec<Vertex> {
+    fn makeLoopForSegment(&self, index: usize, vertices_per_loop: usize) -> Vec<Vertex> {
         let curr_seg = &self.segments[index];
 
         let (right_vec1, right_vec2) = {
@@ -62,11 +62,10 @@ impl Path {
         //println!("ALPHA BISC {}", ang_bisec_vec);
         //println!("CROSS {}", cross_vec);
 
-        let loop_vert_count = 10;
         let mut vertices = Vec::<Vertex>::new();
 
-        for i in 0..loop_vert_count {
-            let angle = std::f32::consts::PI * 2.0 * (i as f32 / loop_vert_count as f32);
+        for i in 0..vertices_per_loop {
+            let angle = std::f32::consts::PI * 2.0 * (i as f32 / vertices_per_loop as f32);
             let new_pos: Vector3<f32> = curr_seg.position + angle.cos() * right_vec1 + angle.sin() * right_vec2;
             //println!("angle {} {} {}", angle, angle.cos(), angle.sin());
             let new_vert = Vertex { position: new_pos };
@@ -79,17 +78,18 @@ impl Path {
     }
 
     pub fn makeLoopMesh(&self) -> Mesh {
+        let vertices_per_loop = 10 as usize;
         let mut vertices = Vec::<Vertex>::new();
         let mut triangles = Vec::<Triangle>::new();
 
         if self.segments.len() > 1 {
             for i in 0..self.segments.len() {
                 println!("index of segment {}", i);
-                let mut new_verts = self.makeLoopForSegment(i);
+                let mut new_verts = self.makeLoopForSegment(i, vertices_per_loop);
                 new_verts.push(Vertex::new(self.segments[i].position));
                 let center_i = vertices.len() + new_verts.len() - 1;
 
-                for vert_i in 0..new_verts.len() - 1 {
+                /*for vert_i in 0..new_verts.len() - 1 {
                     let triangle = Triangle::new(
                         vertices.len() + vert_i,
                         vertices.len() + (vert_i + 1) % (new_verts.len() - 1),
@@ -97,6 +97,19 @@ impl Path {
                     );
                     triangles.push(triangle);
                     println!("made triangle {} {}, {}", triangle.v1, triangle.v2, triangle.v3);
+                }*/
+
+                if i > 0 {
+                    let prev_loop_vertex_0_i = (i - 1) * (vertices_per_loop + 1);
+                    let curr_loop_vertex_0_i = i * (vertices_per_loop + 1);
+                    for new_vert_i in 0..new_verts.len() - 1 {
+                        let prev_loop_curr_vert_i = prev_loop_vertex_0_i + new_vert_i;
+                        let prev_loop_next_vert_i = prev_loop_vertex_0_i + (new_vert_i + 1) % (vertices_per_loop + 1);
+                        let curr_loop_curr_vert_i = curr_loop_vertex_0_i + new_vert_i;
+                        let curr_loop_next_vert_i = curr_loop_vertex_0_i + (new_vert_i + 1) % (vertices_per_loop + 1);
+                        triangles.push(Triangle::new(prev_loop_curr_vert_i, curr_loop_curr_vert_i, curr_loop_next_vert_i));
+                        triangles.push(Triangle::new(prev_loop_curr_vert_i, prev_loop_next_vert_i, curr_loop_next_vert_i));
+                    }
                 }
                 /*
                 if i > 1 {
