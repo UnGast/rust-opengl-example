@@ -67,6 +67,7 @@ impl Path {
         for i in 0..vertices_per_loop {
             let angle = std::f32::consts::PI * 2.0 * (i as f32 / vertices_per_loop as f32);
             let new_pos: Vector3<f32> = curr_seg.position + angle.cos() * right_vec1 + angle.sin() * right_vec2;
+            let normal: Vector3<f32> = new_pos - curr_seg.position;
             //println!("angle {} {} {}", angle, angle.cos(), angle.sin());
             let new_vert = Vertex { position: new_pos };
             //println!("new_vert {}", new_pos);
@@ -85,7 +86,7 @@ impl Path {
             for i in 0..self.segments.len() {
                 let mut new_verts = self.makeLoopForSegment(i, vertices_per_loop);
                 new_verts.push(Vertex::new(self.segments[i].position));
-                let center_i = vertices.len() + new_verts.len() - 1;
+                vertices.append(&mut new_verts);
 
                 /*for vert_i in 0..new_verts.len() - 1 {
                     let triangle = Triangle::new(
@@ -100,13 +101,14 @@ impl Path {
                 if i > 0 {
                     let prev_loop_vertex_0_i = (i - 1) * (vertices_per_loop + 1);
                     let curr_loop_vertex_0_i = i * (vertices_per_loop + 1);
-                    for new_vert_i in 0..new_verts.len() - 1 {
+                    for new_vert_i in 0..vertices_per_loop {
                         let prev_loop_curr_vert_i = prev_loop_vertex_0_i + new_vert_i;
                         let prev_loop_next_vert_i = prev_loop_vertex_0_i + (new_vert_i + 1) % (vertices_per_loop + 1);
                         let curr_loop_curr_vert_i = curr_loop_vertex_0_i + new_vert_i;
                         let curr_loop_next_vert_i = curr_loop_vertex_0_i + (new_vert_i + 1) % (vertices_per_loop + 1);
-                        triangles.push(Triangle::new(prev_loop_curr_vert_i, curr_loop_curr_vert_i, curr_loop_next_vert_i));
-                        triangles.push(Triangle::new(prev_loop_curr_vert_i, prev_loop_next_vert_i, curr_loop_next_vert_i));
+                        
+                        triangles.push(Triangle::new(prev_loop_curr_vert_i, curr_loop_curr_vert_i, prev_loop_next_vert_i));
+                        triangles.push(Triangle::new(curr_loop_next_vert_i, prev_loop_next_vert_i, curr_loop_curr_vert_i));
                     }
                 }
                 /*
@@ -125,7 +127,6 @@ impl Path {
                         ]))
                     }
                 }*/
-                vertices.append(&mut new_verts);
             }
         }
 
@@ -164,7 +165,7 @@ fn find_angle_bisecting_vec(vector1: &Vector3<f32>, vector2: &Vector3<f32>) -> V
 
 #[derive(Clone, Copy, Debug)]
 pub struct Vertex {
-    pub position: Vector3<f32>
+    pub position: Vector3<f32>,
 }
 
 impl Vertex {
@@ -177,12 +178,13 @@ impl Vertex {
 pub struct Triangle {
     pub v1: usize,
     pub v2: usize,
-    pub v3: usize
+    pub v3: usize,
 }
 
 impl Triangle {
+    /** v1, v2, v3, counter clockwise as seen from the side which should be the triangles front face */
     pub fn new(v1: usize, v2: usize, v3: usize) -> Self {
-        Triangle { v1, v2, v3 }
+        Triangle { v1, v2, v3, }
     }
 }
 
@@ -196,14 +198,18 @@ impl Mesh {
         Mesh { vertices, triangles }
     }
 
-    pub fn unfold_vertices(&self) -> Vec<Vertex> {
-        let mut unfolded = Vec::<Vertex>::new();
+    pub fn unfold_vertices(&self) -> Vec<(Vertex, Vector3<f32>)> {
+        let mut unfolded = Vec::<(Vertex, Vector3<f32>)>::new();
 
         for triangle in self.triangles.iter() {
+            let edge1: Vector3<f32> = self.vertices[triangle.v1].position - self.vertices[triangle.v3].position;
+            let edge2: Vector3<f32> = self.vertices[triangle.v2].position - self.vertices[triangle.v1].position;
+            let normal: Vector3<f32> = edge2.cross(&edge1);
+
             unfolded.append(&mut Vec::from([
-                self.vertices[triangle.v1].clone(),
-                self.vertices[triangle.v2].clone(),
-                self.vertices[triangle.v3].clone(),
+                (self.vertices[triangle.v1].clone(), normal.clone()),
+                (self.vertices[triangle.v2].clone(), normal.clone()),
+                (self.vertices[triangle.v3].clone(), normal.clone()),
             ]));
         }
 

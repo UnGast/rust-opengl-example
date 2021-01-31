@@ -10,6 +10,7 @@ use path::{Mesh, Path, PathSegment, Triangle, Vertex};
 
 const VERTEX_SHADER_SOURCE: &str = r#"#version 330 core
 layout (location = 0) in vec3 inPos;
+layout (location = 1) in vec3 inNormal;
 
 uniform mat4 modelTransform;
 uniform mat4 viewProjection;
@@ -17,8 +18,8 @@ uniform mat4 viewProjection;
 out vec3 normal;
 
 void main() {
-    gl_Position = viewProjection * modelTransform * vec4(inPos, 1);
-    normal = vec3(0, 1, 0);
+    normal = (modelTransform * vec4(inNormal, 0)).xyz;
+    gl_Position = viewProjection * modelTransform * vec4(inPos, 1) + vec4(normal, 1) * 0.2;
 }
 "#;
 
@@ -250,29 +251,36 @@ fn main() {
     ]));*/
 
     let mut test_mesh = Mesh::new(Vec::from([
-        // bottom
+        // left bottom front
         Vertex::new(Vector3::new(0.0, 0.0, 0.0)),
+        // right bottom front
         Vertex::new(Vector3::new(1.0, 0.0, 0.0)),
-        Vertex::new(Vector3::new(1.0, 0.0, 1.0)),
-        Vertex::new(Vector3::new(0.0, 0.0, 1.0)),
-
-        // front
+        // left top front
         Vertex::new(Vector3::new(0.0, 1.0, 0.0)),
+        // right top front
         Vertex::new(Vector3::new(1.0, 1.0, 0.0)),
-
-        // right
-        //Vertex::new(Vector3::new())
+        // left bottom back
+        Vertex::new(Vector3::new(0.0, 0.0, 1.0)),
+        // right bottom back
+        Vertex::new(Vector3::new(1.0, 0.0, 1.0)),
+        // left top back
+        Vertex::new(Vector3::new(0.0, 1.0, 1.0)),
+        // right top back
+        Vertex::new(Vector3::new(1.0, 1.0, 1.0)),
     ]), Vec::from([
-        // bottom
-        Triangle::new(0, 1, 2),
-        Triangle::new(0, 2, 3),
         // front
-        Triangle::new(0, 4, 5),
-        Triangle::new(0, 1, 5),
+        Triangle::new(0, 1, 3),
+        Triangle::new(0, 3, 2),
+        // right
+        Triangle::new(1, 5, 7),
+        Triangle::new(1, 7, 3),
+        // front
+        //Triangle::new(0, 4, 5),
+        //Triangle::new(0, 1, 5),
         // right
         //Triangle::new()
     ]));
-    test_mesh = test_path.makeLoopMesh();
+    let mut test_mesh = test_path.makeLoopMesh();
 
     let (mut vao, mut vbo) = (0, 0);
     unsafe {
@@ -285,8 +293,11 @@ fn main() {
 
         gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
         
-        gl::VertexAttribPointer(0, 3, gl::FLOAT, gl::FALSE, 3 * std::mem::size_of::<f32>() as i32, ptr::null());
+        gl::VertexAttribPointer(0, 3, gl::FLOAT, gl::FALSE, 6 * std::mem::size_of::<f32>() as i32, ptr::null());
         gl::EnableVertexAttribArray(0);
+
+        gl::VertexAttribPointer(1, 3, gl::FLOAT, gl::FALSE, 6 * std::mem::size_of::<f32>() as i32, (3 * std::mem::size_of::<f32>()) as *const c_void);
+        gl::EnableVertexAttribArray(1);
 
         gl::BindVertexArray(0);
     }
@@ -297,7 +308,7 @@ fn main() {
 
     let mut ambientLightSource = AmbientLightSource { strength: 0.3, color: Vector4::new(0.5, 0.5, 0.5, 1.0) };
 
-    let mut directionalLightSource = DirectionalLightSource { strength: 1.0, direction: Vector3::new(0.0, 1.0, 0.0), color: Vector4::new(1.0, 1.0, 1.0, 1.0) };
+    let mut directionalLightSource = DirectionalLightSource { strength: 0.4, direction: Vector3::new(0.0, 1.0, 0.0), color: Vector4::new(1.0, 1.0, 1.0, 1.0) };
     let mut directionalLightSourceProgress = CyclicalTimedProgress::new(0.1, false);
 
     while !window.should_close() {
@@ -306,7 +317,7 @@ fn main() {
         last_frame_time = current_frame_time;
 
         directionalLightSourceProgress.add_time(delta_time.as_millis() as f32 / 1000.0);
-        directionalLightSource.strength = directionalLightSourceProgress.progress;
+        //directionalLightSource.strength = directionalLightSourceProgress.progress;
 
         unsafe {
             let (window_width, window_height) = window.get_size();
@@ -322,8 +333,8 @@ fn main() {
             let mut raw_vertices = test_mesh.unfold_vertices();
             let mut vertices = raw_vertices.iter().fold(
             Vec::<f32>::new(), 
-            |res, vertex| {
-                [res, Vec::<f32>::from([vertex.position.x, vertex.position.y, vertex.position.z])].concat()
+            |res, (vertex, normal)| {
+                [res, Vec::<f32>::from([vertex.position.x, vertex.position.y, vertex.position.z, normal.x, normal.y, normal.z])].concat()
             });
             /*vertices = vec![
                 0.0, 0.0, 5.0,
